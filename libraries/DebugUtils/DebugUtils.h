@@ -35,7 +35,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     Serial.print(' ');      \
     Serial.println(str);
 #endif
- 
+
+//XXX-GEKONavsat: comment this part below?
 #ifdef DEBUG
   #define DEBUG_PRINT(str) \
     Serial.println(str);
@@ -44,6 +45,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef DEBUG_PRINT
   #define DEBUG_PRINT(str)
 #endif
+//XXX-GEKONavsat: and substitute it with Debug definitions from MPU60X0.h?
+// #ifdef DEBUG
+	// #define DEBUG_PRINT(x) Serial.print(x)
+	// #define DEBUG_PRINTF(x, y) Serial.print(x, y)
+	// #define DEBUG_PRINTLN(x) Serial.println(x)
+	// #define DEBUG_PRINTLNF(x, y) Serial.println(x, y)
+// #else
+	// #define DEBUG_PRINT(x)
+	// #define DEBUG_PRINTF(x, y)
+	// #define DEBUG_PRINTLN(x)
+	// #define DEBUG_PRINTLNF(x, y)
+// #endif
+//XXX-GEKONavsat: end.
 
 /*
 int availableMemory() {

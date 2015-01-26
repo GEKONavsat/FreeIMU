@@ -21,6 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
+//INFO-GEKONavsat: Modified to include KINEO v1 board support.
+
 #ifndef FreeIMU_h
 #define FreeIMU_h
 
@@ -31,7 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define FREEIMU_v035
 //#define FREEIMU_v035_MS
 //#define FREEIMU_v035_BMP
-#define FREEIMU_v04
+//#define FREEIMU_v04
 
 // 3rd party boards. Please consider donating or buying a FreeIMU board to support this library development.
 //#define SEN_10121 //IMU Digital Combo Board - 6 Degrees of Freedom ITG3200/ADXL345 SEN-10121 http://www.sparkfun.com/products/10121
@@ -40,11 +42,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define SEN_10183 //9 Degrees of Freedom - Sensor Stick  SEN-10183 http://www.sparkfun.com/products/10183
 //#define ARDUIMU_v3 //  DIYDrones ArduIMU+ V3 http://store.diydrones.com/ArduIMU_V3_p/kt-arduimu-30.htm or https://www.sparkfun.com/products/11055
 //#define GEN_MPU6050 // Generic MPU6050 breakout board. Compatible with GY-521, SEN-11028 and other MPU6050 wich have the MPU6050 AD0 pin connected to GND.
+#define KINEO_v1	// GEKO Navsat Kineo v1.0 board
+
 
 //#define DISABLE_MAGN // Uncomment this line to disable the magnetometer in the sensor fusion algorithm
 
 // *** No configuration needed below this line ***
-
 
 #define FREEIMU_LIB_VERSION "DEV"
 
@@ -82,24 +85,37 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   #define FREEIMU_ID "SparkFun 10183"
 #elif defined(ARDUIMU_v3)
   #define FREEIMU_ID "DIY Drones ArduIMU+ V3"
+#elif defined(KINEO_v1)
+  #define FREEIMU_ID "GEKO NavSat Kineo v1.0"
 #endif
 
+// Board Sensors
+#define HAS_ITG3200() 	(defined(FREEIMU_v01)	|| defined(FREEIMU_v02) 	|| defined(FREEIMU_v03) 	|| \
+						defined(FREEIMU_v035)	|| defined(FREEIMU_v035_MS)	|| defined(FREEIMU_v035_BMP)|| \
+						defined(SEN_10121) 		|| defined(SEN_10736) 		|| defined(SEN_10724) 		|| \
+						defined(SEN_10183))
+#define HAS_ADXL345()	(defined(FREEIMU_v01)	|| defined(FREEIMU_v02) 	|| defined(FREEIMU_v03) 	|| \
+						defined(SEN_10121) 		|| defined(SEN_10736) 		|| defined(SEN_10724) 		|| \
+						defined(SEN_10183))
+#define HAS_BMA180() 	(defined(FREEIMU_v035) 	|| defined(FREEIMU_v035_MS)	|| defined(FREEIMU_v035_BMP))
+#define HAS_MPU6050() 	(defined(KINEO_v1)		|| defined(FREEIMU_v04) 	|| defined(GEN_MPU6050))
+#define HAS_MS5611() 	(defined(KINEO_v1)		|| defined(FREEIMU_v035_MS)	|| defined(FREEIMU_v04))	
+#define HAS_HMC5883L() 	(defined(KINEO_v1)		|| defined(FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
+						defined(FREEIMU_v03) 	|| defined(FREEIMU_v035) 	|| defined(FREEIMU_v035_BMP)|| \
+						defined(FREEIMU_v035_MS)|| defined(FREEIMU_v04) 	|| defined(SEN_10736) 		|| \
+						defined(SEN_10724) 		|| defined(SEN_10183)  		|| defined(ARDUIMU_v3))
+#define HAS_MPU6000() 	(defined(ARDUIMU_v3))
 
-
-#define HAS_ITG3200() (defined(FREEIMU_v01) || defined(FREEIMU_v02) || defined(FREEIMU_v03) || defined(FREEIMU_v035) || defined(FREEIMU_v035_MS) || defined(FREEIMU_v035_BMP) || defined(SEN_10121) || defined(SEN_10736) || defined(SEN_10724) || defined(SEN_10183))
-#define HAS_ADXL345() (defined(FREEIMU_v01) || defined(FREEIMU_v02) || defined(FREEIMU_v03) || defined(SEN_10121) || defined(SEN_10736) || defined(SEN_10724) || defined(SEN_10183))
-#define HAS_BMA180() (defined(FREEIMU_v035) || defined(FREEIMU_v035_MS) || defined(FREEIMU_v035_BMP))
-#define HAS_MPU6050() (defined(FREEIMU_v04) || defined(GEN_MPU6050))
-#define HAS_MS5611() (defined(FREEIMU_v035_MS) || defined(FREEIMU_v04))
-#define HAS_HMC5883L() (defined(FREEIMU_v01) || defined(FREEIMU_v02) || defined(FREEIMU_v03) || defined(FREEIMU_v035) || defined(FREEIMU_v035_MS) || defined(FREEIMU_v035_BMP) || defined(FREEIMU_v04) || defined(SEN_10736) || defined(SEN_10724) || defined(SEN_10183)  || defined(ARDUIMU_v3))
-#define HAS_MPU6000() (defined(ARDUIMU_v3))
-
-#define IS_6DOM() (defined(SEN_10121) || defined(GEN_MPU6050))
-#define IS_9DOM() (defined(FREEIMU_v01) || defined(FREEIMU_v02) || defined(FREEIMU_v03) || defined(FREEIMU_v035) || defined(FREEIMU_v035_MS) || defined(FREEIMU_v035_BMP) || defined(FREEIMU_v04) || defined(SEN_10736) || defined(SEN_10724) || defined(SEN_10183) || defined(ARDUIMU_v3))
-#define HAS_AXIS_ALIGNED() (defined(FREEIMU_v01) || defined(FREEIMU_v02) || defined(FREEIMU_v03) || defined(FREEIMU_v035) || defined(FREEIMU_v035_MS) || defined(FREEIMU_v035_BMP) || defined(FREEIMU_v04) || defined(SEN_10121) || defined(SEN_10736))
-
-
-
+#define IS_6DOM() 		(defined(SEN_10121) 	|| defined(GEN_MPU6050))
+#define IS_9DOM() 		(defined(KINEO_v1)		|| defined(FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
+						defined(FREEIMU_v03) 	|| defined(FREEIMU_v035) 	|| defined(FREEIMU_v035_BMP)|| \
+						defined(FREEIMU_v035_MS)|| defined(FREEIMU_v04) 	|| defined(SEN_10736) 		|| \
+						defined(SEN_10724) 		|| defined(SEN_10183) 		|| defined(ARDUIMU_v3))
+						
+#define HAS_AXIS_ALIGNED() 	(defined(KINEO_v1)	|| defined (FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
+							defined(FREEIMU_v03)|| defined(FREEIMU_v035) 	|| defined(FREEIMU_v035_MS) || \
+							defined(FREEIMU_v035_BMP)|| defined(FREEIMU_v04)|| defined(SEN_10121) 		|| \
+							defined(SEN_10736))
 #include <Wire.h>
 #include "Arduino.h"
 #include "calibration.h"
@@ -191,7 +207,8 @@ class FreeIMU
       //float getEstimatedAlt(float sea_press);
     #endif
     void gravityCompensateAcc(float * acc, float * q);
-    
+    void accCompensateGravity(float * acc, float * q);			//XXX-GEKONavsat: lib bug? added declaration
+	
     // we make them public so that users can interact directly with device classes
     #if HAS_ADXL345()
       ADXL345 acc;

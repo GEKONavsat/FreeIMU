@@ -42,6 +42,7 @@ THE SOFTWARE.
   #include <avr/pgmspace.h>
 #endif
 
+//XXX-GEKONavsat: move this part to DebugUtils.h file?
 //#define DEBUG
 #ifdef DEBUG
     #define DEBUG_PRINT(x) Serial.print(x)
@@ -54,7 +55,7 @@ THE SOFTWARE.
     #define DEBUG_PRINTLN(x)
     #define DEBUG_PRINTLNF(x, y)
 #endif 
-
+//XXX-GEKONavsat: end.
 
 #define MPU60X0_ADDRESS_AD0_LOW     0x68 // address pin low (GND), default for InvenSense evaluation board
 #define MPU60X0_ADDRESS_AD0_HIGH    0x69 // address pin high (VCC)

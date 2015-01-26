@@ -178,6 +178,7 @@ void FreeIMU::init(int accgyro_addr, bool fastmode) {
   accgyro.initialize();
   accgyro.setI2CMasterModeEnabled(0);
   accgyro.setI2CBypassEnabled(1);
+  accgyro.setFullScaleAccelRange(MPU60X0_ACCEL_FS_16);	//XXX-GEKONavsat: lib bug? Added. Default: max range as in gyro.
   accgyro.setFullScaleGyroRange(MPU60X0_GYRO_FS_2000);
   delay(5);
   #endif
