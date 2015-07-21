@@ -22,7 +22,7 @@ float val[9];
 FreeIMU my3IMU = FreeIMU();
 
 void setup() { 
-  Serial.begin(115200);
+  Serial.begin(57600);
   Wire.begin();
   
   delay(500);

@@ -34,7 +34,7 @@ const int angleThreshold = 10;
 
 void setup() {
   Keyboard.begin();
-  //Serial.begin(115200);
+  //Serial.begin(57600);
   Wire.begin();
   
   my3IMU.init(true);
