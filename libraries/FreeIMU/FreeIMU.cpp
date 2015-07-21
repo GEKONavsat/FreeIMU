@@ -58,6 +58,12 @@ FreeIMU::FreeIMU() {
   q1 = 0.0f;
   q2 = 0.0f;
   q3 = 0.0f;
+  //Para uncalibrated:
+  qU0 = 1.0f;
+  qU1 = 0.0f;
+  qU2 = 0.0f;
+  qU3 = 0.0f;
+  //
   exInt = 0.0;
   eyInt = 0.0;
   ezInt = 0.0;
@@ -65,7 +71,12 @@ FreeIMU::FreeIMU() {
   twoKi = twoKiDef;
   integralFBx = 0.0f,  integralFBy = 0.0f, integralFBz = 0.0f;
   lastUpdate = 0;
+  lastUpdateUncalib = 0;
   now = 0;
+  nowUncalib = 0;
+  /////////////////////---------------------------------------
+  beta = betaDef;
+  //////////////////////--------------------------------------
   
   #ifndef CALIBRATION_H
   // initialize scale factors to neutral values
@@ -77,12 +88,22 @@ FreeIMU::FreeIMU() {
   magn_scale_z = 1;
   #else
   // get values from global variables of same name defined in calibration.h
+  /*
   acc_off_x = ::acc_off_x;
   acc_off_y = ::acc_off_y;
   acc_off_z = ::acc_off_z;
   acc_scale_x = ::acc_scale_x;
   acc_scale_y = ::acc_scale_y;
   acc_scale_z = ::acc_scale_z;
+  */
+  // modificado ya que se calibra con FS de +-2g, para que adecue los parametros del acelerometro al FS que se esta usando
+  acc_off_x = (::acc_off_x) * MPU60X0_1G_LSB / MPU60X0_ACCEL_1G_LSB_2G;
+  acc_off_y = (::acc_off_y) * MPU60X0_1G_LSB / MPU60X0_ACCEL_1G_LSB_2G;
+  acc_off_z = (::acc_off_z) * MPU60X0_1G_LSB / MPU60X0_ACCEL_1G_LSB_2G;
+  acc_scale_x = (::acc_scale_x) * MPU60X0_1G_LSB / MPU60X0_ACCEL_1G_LSB_2G;
+  acc_scale_y = (::acc_scale_y) * MPU60X0_1G_LSB / MPU60X0_ACCEL_1G_LSB_2G;
+  acc_scale_z = (::acc_scale_z) * MPU60X0_1G_LSB / MPU60X0_ACCEL_1G_LSB_2G;
+  // fin de modificacion
   magn_off_x = ::magn_off_x;
   magn_off_y = ::magn_off_y;
   magn_off_z = ::magn_off_z;
@@ -178,15 +199,37 @@ void FreeIMU::init(int accgyro_addr, bool fastmode) {
   accgyro.initialize();
   accgyro.setI2CMasterModeEnabled(0);
   accgyro.setI2CBypassEnabled(1);
-  accgyro.setFullScaleAccelRange(MPU60X0_ACCEL_FS_16);	//XXX-GEKONavsat: lib bug? Added. Default: max range as in gyro.
-  accgyro.setFullScaleGyroRange(MPU60X0_GYRO_FS_2000);
+  
+  //Modificadas lineas para continuar escribiendo los FS del acelerometro hasta que se compruebe que se han escrito correctamente
+  // **Original**
+  //accgyro.setFullScaleAccelRange(MPU60X0_ACCEL_FS_16);	//XXX-GEKONavsat: lib bug? Added. Default: max range as in gyro.
+  //accgyro.setFullScaleGyroRange(MPU60X0_GYRO_FS_2000);
+  // ************
+  uint8_t fullScaleGyroRange;
+  uint8_t fullScaleAccelRange;
+  do {
+  //accgyro.setFullScaleAccelRange(MPU60X0_ACCEL_FS_16);
+  accgyro.setFullScaleAccelRange(MPU60X0_ACCEL_FS);
+  fullScaleAccelRange = accgyro.getFullScaleAccelRange();
+  //} while (fullScaleAccelRange != MPU60X0_ACCEL_FS_16);
+  } while (fullScaleAccelRange != MPU60X0_ACCEL_FS);
+  do{
+  //accgyro.setFullScaleGyroRange(MPU60X0_GYRO_FS_2000);
+  accgyro.setFullScaleGyroRange(MPU60X0_GYRO_FS);
+  fullScaleGyroRange = accgyro.getFullScaleGyroRange();
+  //} while (fullScaleGyroRange != MPU60X0_GYRO_FS_2000);
+  } while (fullScaleGyroRange != MPU60X0_GYRO_FS);
+  
+  // Hasta aquí
+  
   delay(5);
   #endif
   
   #if HAS_MPU6000()
   accgyro = MPU60X0(true, accgyro_addr);
   accgyro.initialize();
-  accgyro.setFullScaleGyroRange(MPU60X0_GYRO_FS_2000);
+  //accgyro.setFullScaleGyroRange(MPU60X0_GYRO_FS_2000);
+  accgyro.setFullScaleGyroRange(MPU60X0_GYRO_FS);
   delay(5);
   #endif 
   
@@ -209,11 +252,12 @@ void FreeIMU::init(int accgyro_addr, bool fastmode) {
     
   // zero gyro
   zeroGyro();
-  
+  /* // Desactivado para calib/uncalib
   #ifndef CALIBRATION_H
   // load calibration from eeprom
   calLoad();
   #endif
+*/
 }
 
 #ifndef CALIBRATION_H
@@ -327,7 +371,9 @@ void FreeIMU::getValues(float * values) {
         values[i] = (float) accgyroval[i];
       }
       else {
-        values[i] = ((float) accgyroval[i]) / 16.4f; // NOTE: this depends on the sensitivity chosen
+        //values[i] = ((float) accgyroval[i]) / 16.4f; // NOTE: this depends on the sensitivity chosen
+		values[i] = ((float) accgyroval[i]) / MPU60X0_1DEGREE_LSB; //////////// Ahora automaticamente utiliza el FS seleccionado
+		//values[i] = ((float) accgyroval[i]) / 16.4f;
       }
     }
   #endif
@@ -350,12 +396,33 @@ void FreeIMU::getValues(float * values) {
   #endif
 }
 
+// Añadida parte de calculo de valores sin calibración para comparación
+void FreeIMU::getUncalibValues(float * uncalibValues){
+	int16_t accgyrouncalibval[6];
+	accgyro.getMotion6(&accgyrouncalibval[0],&accgyrouncalibval[1],&accgyrouncalibval[2],&accgyrouncalibval[3],&accgyrouncalibval[4],&accgyrouncalibval[5]);
+	magn.getValues(&uncalibValues[6]);
+	
+	//Dividimos por LSB en vez de FS
+	for (int i = 0; i < 9; i++){
+		if (i < 3){
+			uncalibValues[i] = ((float)accgyrouncalibval[i]) / MPU60X0_1G_LSB;
+		}
+		else if (i < 6){
+			uncalibValues[i] = ((float)accgyrouncalibval[i]) / MPU60X0_1DEGREE_LSB;
+		}
+		else{
+			uncalibValues[i] = ((float)uncalibValues[i]) / 1090;
+		}
+	}
+}
+//
+
 
 /**
  * Computes gyro offsets
 */
 void FreeIMU::zeroGyro() {
-  const int totSamples = 3;
+  const int totSamples = 30;
   int raw[11];
   float tmpOffsets[] = {0,0,0};
   
@@ -371,6 +438,7 @@ void FreeIMU::zeroGyro() {
   gyro_off_z = tmpOffsets[2] / totSamples;
 }
 
+#define DISABLE_MAGN;
 
 /**
  * Quaternion implementation of the 'DCM filter' [Mayhony et al].  Incorporates the magnetic distortion
@@ -496,6 +564,440 @@ void  FreeIMU::AHRSupdate(float gx, float gy, float gz, float ax, float ay, floa
   q3 *= recipNorm;
 }
 
+void FreeIMU::MadgwickAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz) {
+	float recipNorm;
+	float s0, s1, s2, s3;
+	float qDot1, qDot2, qDot3, qDot4;
+	float hx, hy;
+	float _2q0mx, _2q0my, _2q0mz, _2q1mx, _2bx, _2bz, _4bx, _4bz, _2q0, _2q1, _2q2, _2q3, _2q0q2, _2q2q3, q0q0, q0q1, q0q2, q0q3, q1q1, q1q2, q1q3, q2q2, q2q3, q3q3;
+
+	// Use IMU algorithm if magnetometer measurement invalid (avoids NaN in magnetometer normalisation)
+	if((mx == 0.0f) && (my == 0.0f) && (mz == 0.0f)) {
+		MadgwickAHRSupdateIMU(gx, gy, gz, ax, ay, az);
+		return;
+	}
+
+	// Rate of change of quaternion from gyroscope
+	qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
+	qDot2 = 0.5f * (q0 * gx + q2 * gz - q3 * gy);
+	qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
+	qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
+
+	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
+	if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
+
+		// Normalise accelerometer measurement
+		recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+		ax *= recipNorm;
+		ay *= recipNorm;
+		az *= recipNorm;   
+
+		// Normalise magnetometer measurement
+		recipNorm = invSqrt(mx * mx + my * my + mz * mz);
+		mx *= recipNorm;
+		my *= recipNorm;
+		mz *= recipNorm;
+
+		// Auxiliary variables to avoid repeated arithmetic
+		_2q0mx = 2.0f * q0 * mx;
+		_2q0my = 2.0f * q0 * my;
+		_2q0mz = 2.0f * q0 * mz;
+		_2q1mx = 2.0f * q1 * mx;
+		_2q0 = 2.0f * q0;
+		_2q1 = 2.0f * q1;
+		_2q2 = 2.0f * q2;
+		_2q3 = 2.0f * q3;
+		_2q0q2 = 2.0f * q0 * q2;
+		_2q2q3 = 2.0f * q2 * q3;
+		q0q0 = q0 * q0;
+		q0q1 = q0 * q1;
+		q0q2 = q0 * q2;
+		q0q3 = q0 * q3;
+		q1q1 = q1 * q1;
+		q1q2 = q1 * q2;
+		q1q3 = q1 * q3;
+		q2q2 = q2 * q2;
+		q2q3 = q2 * q3;
+		q3q3 = q3 * q3;
+
+		// Reference direction of Earth's magnetic field
+		hx = mx * q0q0 - _2q0my * q3 + _2q0mz * q2 + mx * q1q1 + _2q1 * my * q2 + _2q1 * mz * q3 - mx * q2q2 - mx * q3q3;
+		hy = _2q0mx * q3 + my * q0q0 - _2q0mz * q1 + _2q1mx * q2 - my * q1q1 + my * q2q2 + _2q2 * mz * q3 - my * q3q3;
+		_2bx = sqrt(hx * hx + hy * hy);
+		_2bz = -_2q0mx * q2 + _2q0my * q1 + mz * q0q0 + _2q1mx * q3 - mz * q1q1 + _2q2 * my * q3 - mz * q2q2 + mz * q3q3;
+		_4bx = 2.0f * _2bx;
+		_4bz = 2.0f * _2bz;
+
+		// Gradient decent algorithm corrective step
+		s0 = -_2q2 * (2.0f * q1q3 - _2q0q2 - ax) + _2q1 * (2.0f * q0q1 + _2q2q3 - ay) - _2bz * q2 * (_2bx * (0.5f - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (-_2bx * q3 + _2bz * q1) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + _2bx * q2 * (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
+		s1 = _2q3 * (2.0f * q1q3 - _2q0q2 - ax) + _2q0 * (2.0f * q0q1 + _2q2q3 - ay) - 4.0f * q1 * (1 - 2.0f * q1q1 - 2.0f * q2q2 - az) + _2bz * q3 * (_2bx * (0.5f - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (_2bx * q2 + _2bz * q0) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + (_2bx * q3 - _4bz * q1) * (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
+		s2 = -_2q0 * (2.0f * q1q3 - _2q0q2 - ax) + _2q3 * (2.0f * q0q1 + _2q2q3 - ay) - 4.0f * q2 * (1 - 2.0f * q1q1 - 2.0f * q2q2 - az) + (-_4bx * q2 - _2bz * q0) * (_2bx * (0.5f - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (_2bx * q1 + _2bz * q3) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + (_2bx * q0 - _4bz * q2) * (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
+		s3 = _2q1 * (2.0f * q1q3 - _2q0q2 - ax) + _2q2 * (2.0f * q0q1 + _2q2q3 - ay) + (-_4bx * q3 + _2bz * q1) * (_2bx * (0.5f - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (-_2bx * q0 + _2bz * q2) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + _2bx * q1 * (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
+		recipNorm = invSqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3); // normalise step magnitude
+		s0 *= recipNorm;
+		s1 *= recipNorm;
+		s2 *= recipNorm;
+		s3 *= recipNorm;
+
+		// Apply feedback step
+		qDot1 -= beta * s0;
+		qDot2 -= beta * s1;
+		qDot3 -= beta * s2;
+		qDot4 -= beta * s3;
+	}
+
+	// Integrate rate of change of quaternion to yield quaternion
+	q0 += qDot1 * (1.0f / sampleFreq);
+	q1 += qDot2 * (1.0f / sampleFreq);
+	q2 += qDot3 * (1.0f / sampleFreq);
+	q3 += qDot4 * (1.0f / sampleFreq);
+
+	// Normalise quaternion
+	recipNorm = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+	q0 *= recipNorm;
+	q1 *= recipNorm;
+	q2 *= recipNorm;
+	q3 *= recipNorm;
+}
+
+void FreeIMU::MadgwickAHRSupdateUncalibrated(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz) {
+	float recipNorm;
+	float s0, s1, s2, s3;
+	float qDot1, qDot2, qDot3, qDot4;
+	float hx, hy;
+	float _2q0mx, _2q0my, _2q0mz, _2q1mx, _2bx, _2bz, _4bx, _4bz, _2q0, _2q1, _2q2, _2q3, _2q0q2, _2q2q3, q0q0, q0q1, q0q2, q0q3, q1q1, q1q2, q1q3, q2q2, q2q3, q3q3;
+
+	// Use IMU algorithm if magnetometer measurement invalid (avoids NaN in magnetometer normalisation)
+	if((mx == 0.0f) && (my == 0.0f) && (mz == 0.0f)) {
+		MadgwickAHRSupdateIMU(gx, gy, gz, ax, ay, az);
+		return;
+	}
+
+	// Rate of change of quaternion from gyroscope
+	qDot1 = 0.5f * (-qU1 * gx - qU2 * gy - qU3 * gz);
+	qDot2 = 0.5f * (qU0 * gx + qU2 * gz - qU3 * gy);
+	qDot3 = 0.5f * (qU0 * gy - qU1 * gz + qU3 * gx);
+	qDot4 = 0.5f * (qU0 * gz + qU1 * gy - qU2 * gx);
+
+	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
+	if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
+
+		// Normalise accelerometer measurement
+		recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+		ax *= recipNorm;
+		ay *= recipNorm;
+		az *= recipNorm;   
+
+		// Normalise magnetometer measurement
+		recipNorm = invSqrt(mx * mx + my * my + mz * mz);
+		mx *= recipNorm;
+		my *= recipNorm;
+		mz *= recipNorm;
+
+		// Auxiliary variables to avoid repeated arithmetic
+		_2q0mx = 2.0f * qU0 * mx;
+		_2q0my = 2.0f * qU0 * my;
+		_2q0mz = 2.0f * qU0 * mz;
+		_2q1mx = 2.0f * qU1 * mx;
+		_2q0 = 2.0f * qU0;
+		_2q1 = 2.0f * qU1;
+		_2q2 = 2.0f * qU2;
+		_2q3 = 2.0f * qU3;
+		_2q0q2 = 2.0f * qU0 * qU2;
+		_2q2q3 = 2.0f * qU2 * qU3;
+		q0q0 = qU0 * qU0;
+		q0q1 = qU0 * qU1;
+		q0q2 = qU0 * qU2;
+		q0q3 = qU0 * qU3;
+		q1q1 = qU1 * qU1;
+		q1q2 = qU1 * qU2;
+		q1q3 = qU1 * qU3;
+		q2q2 = qU2 * qU2;
+		q2q3 = qU2 * qU3;
+		q3q3 = qU3 * qU3;
+
+		// Reference direction of Earth's magnetic field
+		hx = mx * q0q0 - _2q0my * qU3 + _2q0mz * qU2 + mx * q1q1 + _2q1 * my * qU2 + _2q1 * mz * qU3 - mx * q2q2 - mx * q3q3;
+		hy = _2q0mx * qU3 + my * q0q0 - _2q0mz * qU1 + _2q1mx * qU2 - my * q1q1 + my * q2q2 + _2q2 * mz * qU3 - my * q3q3;
+		_2bx = sqrt(hx * hx + hy * hy);
+		_2bz = -_2q0mx * qU2 + _2q0my * qU1 + mz * q0q0 + _2q1mx * qU3 - mz * q1q1 + _2q2 * my * qU3 - mz * q2q2 + mz * q3q3;
+		_4bx = 2.0f * _2bx;
+		_4bz = 2.0f * _2bz;
+
+		// Gradient decent algorithm corrective step
+		s0 = -_2q2 * (2.0f * q1q3 - _2q0q2 - ax) + _2q1 * (2.0f * q0q1 + _2q2q3 - ay) - _2bz * qU2 * (_2bx * (0.5f - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (-_2bx * qU3 + _2bz * qU1) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + _2bx * qU2 * (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
+		s1 = _2q3 * (2.0f * q1q3 - _2q0q2 - ax) + _2q0 * (2.0f * q0q1 + _2q2q3 - ay) - 4.0f * qU1 * (1 - 2.0f * q1q1 - 2.0f * q2q2 - az) + _2bz * qU3 * (_2bx * (0.5f - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (_2bx * qU2 + _2bz * qU0) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + (_2bx * qU3 - _4bz * qU1) * (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
+		s2 = -_2q0 * (2.0f * q1q3 - _2q0q2 - ax) + _2q3 * (2.0f * q0q1 + _2q2q3 - ay) - 4.0f * qU2 * (1 - 2.0f * q1q1 - 2.0f * q2q2 - az) + (-_4bx * qU2 - _2bz * qU0) * (_2bx * (0.5f - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (_2bx * qU1 + _2bz * qU3) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + (_2bx * qU0 - _4bz * qU2) * (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
+		s3 = _2q1 * (2.0f * q1q3 - _2q0q2 - ax) + _2q2 * (2.0f * q0q1 + _2q2q3 - ay) + (-_4bx * qU3 + _2bz * qU1) * (_2bx * (0.5f - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (-_2bx * qU0 + _2bz * qU2) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + _2bx * qU1 * (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
+		recipNorm = invSqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3); // normalise step magnitude
+		s0 *= recipNorm;
+		s1 *= recipNorm;
+		s2 *= recipNorm;
+		s3 *= recipNorm;
+
+		// Apply feedback step
+		qDot1 -= beta * s0;
+		qDot2 -= beta * s1;
+		qDot3 -= beta * s2;
+		qDot4 -= beta * s3;
+	}
+
+	// Integrate rate of change of quaternion to yield quaternion
+	qU0 += qDot1 * (1.0f / sampleFreqUncalib);
+	qU1 += qDot2 * (1.0f / sampleFreqUncalib);
+	qU2 += qDot3 * (1.0f / sampleFreqUncalib);
+	qU3 += qDot4 * (1.0f / sampleFreqUncalib);
+
+	// Normalise quaternion
+	recipNorm = invSqrt(qU0 * qU0 + qU1 * qU1 + qU2 * qU2 + qU3 * qU3);
+	qU0 *= recipNorm;
+	qU1 *= recipNorm;
+	qU2 *= recipNorm;
+	qU3 *= recipNorm;
+}
+
+//---------------------------------------------------------------------------------------------------
+// IMU algorithm update
+
+void FreeIMU::MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az) {
+	float recipNorm;
+	float s0, s1, s2, s3;
+	float qDot1, qDot2, qDot3, qDot4;
+	float _2q0, _2q1, _2q2, _2q3, _4q0, _4q1, _4q2 ,_8q1, _8q2, q0q0, q1q1, q2q2, q3q3;
+
+	// Rate of change of quaternion from gyroscope
+	qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
+	qDot2 = 0.5f * (q0 * gx + q2 * gz - q3 * gy);
+	qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
+	qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
+
+	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
+	if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
+
+		// Normalise accelerometer measurement
+		recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+		ax *= recipNorm;
+		ay *= recipNorm;
+		az *= recipNorm;   
+
+		// Auxiliary variables to avoid repeated arithmetic
+		_2q0 = 2.0f * q0;
+		_2q1 = 2.0f * q1;
+		_2q2 = 2.0f * q2;
+		_2q3 = 2.0f * q3;
+		_4q0 = 4.0f * q0;
+		_4q1 = 4.0f * q1;
+		_4q2 = 4.0f * q2;
+		_8q1 = 8.0f * q1;
+		_8q2 = 8.0f * q2;
+		q0q0 = q0 * q0;
+		q1q1 = q1 * q1;
+		q2q2 = q2 * q2;
+		q3q3 = q3 * q3;
+
+		// Gradient decent algorithm corrective step
+		s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
+		s1 = _4q1 * q3q3 - _2q3 * ax + 4.0f * q0q0 * q1 - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
+		s2 = 4.0f * q0q0 * q2 + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
+		s3 = 4.0f * q1q1 * q3 - _2q1 * ax + 4.0f * q2q2 * q3 - _2q2 * ay;
+		recipNorm = invSqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3); // normalise step magnitude
+		s0 *= recipNorm;
+		s1 *= recipNorm;
+		s2 *= recipNorm;
+		s3 *= recipNorm;
+
+		// Apply feedback step
+		qDot1 -= beta * s0;
+		qDot2 -= beta * s1;
+		qDot3 -= beta * s2;
+		qDot4 -= beta * s3;
+	}
+
+	// Integrate rate of change of quaternion to yield quaternion
+	q0 += qDot1 * (1.0f / sampleFreq);
+	q1 += qDot2 * (1.0f / sampleFreq);
+	q2 += qDot3 * (1.0f / sampleFreq);
+	q3 += qDot4 * (1.0f / sampleFreq);
+
+	// Normalise quaternion
+	recipNorm = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+	q0 *= recipNorm;
+	q1 *= recipNorm;
+	q2 *= recipNorm;
+	q3 *= recipNorm;
+}
+
+
+void FreeIMU::MahonyAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz) {
+	float recipNorm;
+    float q0q0, q0q1, q0q2, q0q3, q1q1, q1q2, q1q3, q2q2, q2q3, q3q3;  
+	float hx, hy, bx, bz;
+	float halfvx, halfvy, halfvz, halfwx, halfwy, halfwz;
+	float halfex, halfey, halfez;
+	float qa, qb, qc;
+
+	// Use IMU algorithm if magnetometer measurement invalid (avoids NaN in magnetometer normalisation)
+	if((mx == 0.0f) && (my == 0.0f) && (mz == 0.0f)) {
+		MahonyAHRSupdateIMU(gx, gy, gz, ax, ay, az);
+		return;
+	}
+
+	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
+	if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
+
+		// Normalise accelerometer measurement
+		recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+		ax *= recipNorm;
+		ay *= recipNorm;
+		az *= recipNorm;     
+
+		// Normalise magnetometer measurement
+		recipNorm = invSqrt(mx * mx + my * my + mz * mz);
+		mx *= recipNorm;
+		my *= recipNorm;
+		mz *= recipNorm;   
+
+        // Auxiliary variables to avoid repeated arithmetic
+        q0q0 = q0 * q0;
+        q0q1 = q0 * q1;
+        q0q2 = q0 * q2;
+        q0q3 = q0 * q3;
+        q1q1 = q1 * q1;
+        q1q2 = q1 * q2;
+        q1q3 = q1 * q3;
+        q2q2 = q2 * q2;
+        q2q3 = q2 * q3;
+        q3q3 = q3 * q3;   
+
+        // Reference direction of Earth's magnetic field
+        hx = 2.0f * (mx * (0.5f - q2q2 - q3q3) + my * (q1q2 - q0q3) + mz * (q1q3 + q0q2));
+        hy = 2.0f * (mx * (q1q2 + q0q3) + my * (0.5f - q1q1 - q3q3) + mz * (q2q3 - q0q1));
+        bx = sqrt(hx * hx + hy * hy);
+        bz = 2.0f * (mx * (q1q3 - q0q2) + my * (q2q3 + q0q1) + mz * (0.5f - q1q1 - q2q2));
+
+		// Estimated direction of gravity and magnetic field
+		halfvx = q1q3 - q0q2;
+		halfvy = q0q1 + q2q3;
+		halfvz = q0q0 - 0.5f + q3q3;
+        halfwx = bx * (0.5f - q2q2 - q3q3) + bz * (q1q3 - q0q2);
+        halfwy = bx * (q1q2 - q0q3) + bz * (q0q1 + q2q3);
+        halfwz = bx * (q0q2 + q1q3) + bz * (0.5f - q1q1 - q2q2);  
+	
+		// Error is sum of cross product between estimated direction and measured direction of field vectors
+		halfex = (ay * halfvz - az * halfvy) + (my * halfwz - mz * halfwy);
+		halfey = (az * halfvx - ax * halfvz) + (mz * halfwx - mx * halfwz);
+		halfez = (ax * halfvy - ay * halfvx) + (mx * halfwy - my * halfwx);
+
+		// Compute and apply integral feedback if enabled
+		if(twoKi > 0.0f) {
+			integralFBx += twoKi * halfex * (1.0f / sampleFreq);	// integral error scaled by Ki
+			integralFBy += twoKi * halfey * (1.0f / sampleFreq);
+			integralFBz += twoKi * halfez * (1.0f / sampleFreq);
+			gx += integralFBx;	// apply integral feedback
+			gy += integralFBy;
+			gz += integralFBz;
+		}
+		else {
+			integralFBx = 0.0f;	// prevent integral windup
+			integralFBy = 0.0f;
+			integralFBz = 0.0f;
+		}
+
+		// Apply proportional feedback
+		gx += twoKp * halfex;
+		gy += twoKp * halfey;
+		gz += twoKp * halfez;
+	}
+	
+	// Integrate rate of change of quaternion
+	gx *= (0.5f * (1.0f / sampleFreq));		// pre-multiply common factors
+	gy *= (0.5f * (1.0f / sampleFreq));
+	gz *= (0.5f * (1.0f / sampleFreq));
+	qa = q0;
+	qb = q1;
+	qc = q2;
+	q0 += (-qb * gx - qc * gy - q3 * gz);
+	q1 += (qa * gx + qc * gz - q3 * gy);
+	q2 += (qa * gy - qb * gz + q3 * gx);
+	q3 += (qa * gz + qb * gy - qc * gx); 
+	
+	// Normalise quaternion
+	recipNorm = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+	q0 *= recipNorm;
+	q1 *= recipNorm;
+	q2 *= recipNorm;
+	q3 *= recipNorm;
+}
+
+//---------------------------------------------------------------------------------------------------
+// IMU algorithm update
+
+void FreeIMU::MahonyAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az) {
+	float recipNorm;
+	float halfvx, halfvy, halfvz;
+	float halfex, halfey, halfez;
+	float qa, qb, qc;
+
+	// Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
+	if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
+
+		// Normalise accelerometer measurement
+		recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+		ax *= recipNorm;
+		ay *= recipNorm;
+		az *= recipNorm;        
+
+		// Estimated direction of gravity and vector perpendicular to magnetic flux
+		halfvx = q1 * q3 - q0 * q2;
+		halfvy = q0 * q1 + q2 * q3;
+		halfvz = q0 * q0 - 0.5f + q3 * q3;
+	
+		// Error is sum of cross product between estimated and measured direction of gravity
+		halfex = (ay * halfvz - az * halfvy);
+		halfey = (az * halfvx - ax * halfvz);
+		halfez = (ax * halfvy - ay * halfvx);
+
+		// Compute and apply integral feedback if enabled
+		if(twoKi > 0.0f) {
+			integralFBx += twoKi * halfex * (1.0f / sampleFreq);	// integral error scaled by Ki
+			integralFBy += twoKi * halfey * (1.0f / sampleFreq);
+			integralFBz += twoKi * halfez * (1.0f / sampleFreq);
+			gx += integralFBx;	// apply integral feedback
+			gy += integralFBy;
+			gz += integralFBz;
+		}
+		else {
+			integralFBx = 0.0f;	// prevent integral windup
+			integralFBy = 0.0f;
+			integralFBz = 0.0f;
+		}
+
+		// Apply proportional feedback
+		gx += twoKp * halfex;
+		gy += twoKp * halfey;
+		gz += twoKp * halfez;
+	}
+	
+	// Integrate rate of change of quaternion
+	gx *= (0.5f * (1.0f / sampleFreq));		// pre-multiply common factors
+	gy *= (0.5f * (1.0f / sampleFreq));
+	gz *= (0.5f * (1.0f / sampleFreq));
+	qa = q0;
+	qb = q1;
+	qc = q2;
+	q0 += (-qb * gx - qc * gy - q3 * gz);
+	q1 += (qa * gx + qc * gz - q3 * gy);
+	q2 += (qa * gy - qb * gz + q3 * gx);
+	q3 += (qa * gz + qb * gy - qc * gx); 
+	
+	// Normalise quaternion
+	recipNorm = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+	q0 *= recipNorm;
+	q1 *= recipNorm;
+	q2 *= recipNorm;
+	q3 *= recipNorm;
+}
+
 
 /**
  * Populates array q with a quaternion representing the IMU orientation with respect to the Earth
@@ -506,15 +1008,14 @@ void FreeIMU::getQ(float * q) {
   float val[9];
   getValues(val);
   
-  DEBUG_PRINT(val[3] * M_PI/180);
-  DEBUG_PRINT(val[4] * M_PI/180);
-  DEBUG_PRINT(val[5] * M_PI/180);
-  DEBUG_PRINT(val[0]);
-  DEBUG_PRINT(val[1]);
-  DEBUG_PRINT(val[2]);
-  DEBUG_PRINT(val[6]);
-  DEBUG_PRINT(val[7]);
-  DEBUG_PRINT(val[8]);
+  //DEBUG_PRINT(val[3] * M_PI/180);
+  //DEBUG_PRINT(val[4] * M_PI/180);
+  //DEBUG_PRINT(val[5] * M_PI/180);
+  //DEBUG_PRINT(val[0]);
+  ////DEBUG_PRINT(val[2]);
+  //DEBUG_PRINT(val[6]);
+  //DEBUG_PRINT(val[7]);
+  //DEBUG_PRINT(val[8]);
   
   now = micros();
   sampleFreq = 1.0 / ((now - lastUpdate) / 1000000.0);
@@ -523,21 +1024,59 @@ void FreeIMU::getQ(float * q) {
   // gyro values are expressed in deg/sec, the * M_PI/180 will convert it to radians/sec
   #if IS_9DOM()
     #if HAS_AXIS_ALIGNED()
-      AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[6], val[7], val[8]);
+	  //MahonyAHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[6], val[7], val[8]);
+	  MadgwickAHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[6], val[7], val[8]);
+      //AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[6], val[7], val[8]);
     #elif defined(SEN_10724)
       AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[7], -val[6], val[8]);
     #elif defined(ARDUIMU_v3)
       AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], -val[6], -val[7], val[8]);
-    #endif
+    #elif defined(MAGN_DISABLED)	//////////////*********** Añadido para probar Kyneo v3 con magnetometro inoperativo
+		MadgwickAHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2]);
+	#endif
+	
   #else
     AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2]);
   #endif
-  
+
   q[0] = q0;
   q[1] = q1;
   q[2] = q2;
   q[3] = q3;
+ 
+}
+
+void FreeIMU::getUncalibratedQ(float * qU) {
+  float val[9];
+  getUncalibValues(val);
+    
+  nowUncalib = micros();
+  sampleFreqUncalib = 1.0 / ((nowUncalib - lastUpdateUncalib) / 1000000.0);
+  lastUpdateUncalib = nowUncalib;
   
+  // gyro values are expressed in deg/sec, the * M_PI/180 will convert it to radians/sec
+  #if IS_9DOM()
+    #if HAS_AXIS_ALIGNED()
+	  //MahonyAHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[6], val[7], val[8]);
+	  MadgwickAHRSupdateUncalibrated(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[6], val[7], val[8]);
+      //AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[6], val[7], val[8]);
+    #elif defined(SEN_10724)
+      AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], val[7], -val[6], val[8]);
+    #elif defined(ARDUIMU_v3)
+      AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2], -val[6], -val[7], val[8]);
+    #elif defined(MAGN_DISABLED)	//////////////*********** Añadido para probar Kyneo v3 con magnetometro inoperativo
+		MadgwickAHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2]);
+	#endif
+	
+  #else
+    AHRSupdate(val[3] * M_PI/180, val[4] * M_PI/180, val[5] * M_PI/180, val[0], val[1], val[2]);
+  #endif
+
+  qU[0] = qU0;
+  qU[1] = qU1;
+  qU[2] = qU2;
+  qU[3] = qU3;
+ 
 }
 
 
@@ -736,6 +1275,7 @@ void arr3_rad_to_deg(float * arr) {
  * Fast inverse square root implementation. Compatible both for 32 and 8 bit microcontrollers.
  * @see http://en.wikipedia.org/wiki/Fast_inverse_square_root
 */
+/*
 float invSqrt(float number) {
   union {
     float f;
@@ -746,8 +1286,17 @@ float invSqrt(float number) {
   y.i = 0x5f375a86 - (y.i >> 1);
   y.f = y.f * ( 1.5f - ( number * 0.5f * y.f * y.f ) );
   return y.f;
-}
+}*/
 
+float invSqrt(float x) {
+	float halfx = 0.5f * x;
+	float y = x;
+	long i = *(long*)&y;
+	i = 0x5f3759df - (i>>1);
+	y = *(float*)&i;
+	y = y * (1.5f - (halfx * y * y));
+	return y;
+}
 /* Old 8bit version. Kept it here only for testing/debugging of the new code above.
 float invSqrt(float number) {
   volatile long i;

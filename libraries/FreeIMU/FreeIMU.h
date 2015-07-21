@@ -171,17 +171,99 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // HMC5843 address is fixed so don't bother to define it
 
 
-#define twoKpDef  (2.0f * 0.5f) // 2 * proportional gain
-#define twoKiDef  (2.0f * 0.1f) // 2 * integral gain
+#define twoKpDef  (2.0f * 0.75f)//0.75f)	//(2.0f * 0.5f) // 2 * proportional gain
+#define twoKiDef  (2.0f * 0.1625f)//0.1625f) // 2 * integral gain
 
 #ifndef cbi
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #endif
+/////////////////////////////////---------------------------------------------
+#define betaDef		0.075f		// 2 * proportional gain
+/////////////////////////////////---------------------------------------------
+
+/////////////////////////////////---------------------------------------------
+
+/// Definición de los factores de escala
+/// Ojo, solo hecho para la MPU6050. No se tiene en cuenta que en otras placas puedan ser otros valores diferentes
+// Para la calibración, seleccionar los FS +-2g para obtener resultados lo mas precisos posibles. El FS del giroscopo no importa. El del magnetometro (la ganancia) se deja fijo según lo que ya hay.
+
+//#define FS_ACC 2	// +-2g
+//#define FS_ACC 4	// +-4g
+//#define FS_ACC 8	// +-8g
+#define FS_ACC 16	// +-16g
+
+//#define FS_GYRO 250	//+-250º/s
+//#define FS_GYRO 500	//+-500º/s
+//#define FS_GYRO 1000	//+-1000º/s
+#define FS_GYRO 2000	//+-2000º/s
+
+
+//MPU60X0_ACCEL_FS_2          0x00
+//MPU60X0_ACCEL_FS_4          0x01
+//MPU60X0_ACCEL_FS_8          0x02
+//MPU60X0_ACCEL_FS_16         0x03
+#if (FS_ACC == 2)
+#define MPU60X0_ACCEL_FS	0x00
+#define MPU60X0_1G_LSB	16384
+#elif (FS_ACC == 4)
+#define MPU60X0_ACCEL_FS	0x01
+#define MPU60X0_1G_LSB	8192
+#elif (FS_ACC == 8)
+#define MPU60X0_ACCEL_FS	0x02
+#define MPU60X0_1G_LSB	4096
+#elif (FS_ACC == 16)
+#define MPU60X0_ACCEL_FS	0x03
+#define MPU60X0_1G_LSB	2048
+#else
+#error "Accelerometer FS not valid"
+#endif
+
+//Definimos el FS de +-2g que usaremos en la conversión de los parametros de calibración
+#define MPU60X0_ACCEL_1G_LSB_2G	16384
+
+/// Los LSB del gyroscopo aqui definidos no se usan. se ponen por si se necesitan
+//MPU60X0_GYRO_FS_250         0x00
+//MPU60X0_GYRO_FS_500         0x01
+//MPU60X0_GYRO_FS_1000        0x02
+//MPU60X0_GYRO_FS_2000        0x03
+#if (FS_GYRO == 250)
+#define MPU60X0_GYRO_FS	0x00
+#define MPU60X0_1DEGREE_LSB	131.0f
+#elif (FS_GYRO == 500)
+#define MPU60X0_GYRO_FS	0x01
+#define MPU60X0_1DEGREE_LSB	65.5f
+#elif (FS_GYRO == 1000)
+#define MPU60X0_GYRO_FS	0x02
+#define MPU60X0_1DEGREE_LSB	32.8f
+#elif (FS_GYRO == 2000)
+#define MPU60X0_GYRO_FS 0x03
+#define MPU60X0_1DEGREE_LSB	16.4f
+#else
+#error "Gyroscope FS not valid"
+#endif
+
+/////////////////////////////////---------------------------------------------
+
+//#define MAGN_DISABLED //////////////*************** Añadido para probar placa Kyneo v3 en la que no funciona el magnetometro
 
 class FreeIMU
 {
   public:
     FreeIMU();
+	
+	//Para compensación de temperatura
+	  // TC
+	float m[3], b[3];
+	int reft;
+	byte state;
+	
+	//Para compensación de temperatura
+	void tc_param(float mx,float my,float mz,float bx, float by,float bz, int t); // sets parameters for TC  
+	void tc_bias();
+	//
+	
+	//
+	
     void init();
     void init(bool fastmode);
     #if HAS_ITG3200()
@@ -241,6 +323,14 @@ class FreeIMU
     int16_t acc_off_x, acc_off_y, acc_off_z, magn_off_x, magn_off_y, magn_off_z;
     float acc_scale_x, acc_scale_y, acc_scale_z, magn_scale_x, magn_scale_y, magn_scale_z;
     
+	/// parte de demostración del no uso de calibración
+	
+	void getUncalibValues(float * uncalibValues);
+	void getUncalibratedQ(float * q);
+	
+	//
+	
+	
   private:
     #if IS_9DOM()
     void AHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz);
@@ -253,9 +343,28 @@ class FreeIMU
     volatile float twoKp;      // 2 * proportional gain (Kp)
     volatile float twoKi;      // 2 * integral gain (Ki)
     volatile float q0, q1, q2, q3; // quaternion of sensor frame relative to auxiliary frame
+	// Para uncalibrated
+	volatile float qU0, qU1, qU2, qU3; // quaternion of sensor frame relative to auxiliary frame
+	//
     volatile float integralFBx,  integralFBy, integralFBz;
     unsigned long lastUpdate, now; // sample period expressed in milliseconds
+	unsigned long lastUpdateUncalib, nowUncalib;
     float sampleFreq; // half the sample period expressed in seconds
+	float sampleFreqUncalib;
+	
+	/////////////////////////
+	volatile float beta;
+	void MadgwickAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz);
+	void MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az);
+	
+	void MadgwickAHRSupdateUncalibrated(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz);
+	/////////////////////////
+	
+	/////////////////////////
+	void MahonyAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz);
+	void MahonyAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az);
+
+	/////////////////////////
     
 };
 
