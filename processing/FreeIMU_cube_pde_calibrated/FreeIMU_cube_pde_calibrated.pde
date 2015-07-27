@@ -225,6 +225,9 @@ void keyPressed() {
     hq = null;
     hqU = null;
   }
+  else if(key == 'q') {
+    exit();
+  }
 }
 
 // See Sebastian O.H. Madwick report 
