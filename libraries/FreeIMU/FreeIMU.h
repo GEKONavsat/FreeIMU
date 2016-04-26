@@ -21,7 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
-//INFO-GEKONavsat: Modified to include KINEO v1 board support.
+//INFO-GEKONavsat: Modified to include KYNEO v1 board support.
 
 #ifndef FreeIMU_h
 #define FreeIMU_h
@@ -42,7 +42,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //#define SEN_10183 //9 Degrees of Freedom - Sensor Stick  SEN-10183 http://www.sparkfun.com/products/10183
 //#define ARDUIMU_v3 //  DIYDrones ArduIMU+ V3 http://store.diydrones.com/ArduIMU_V3_p/kt-arduimu-30.htm or https://www.sparkfun.com/products/11055
 //#define GEN_MPU6050 // Generic MPU6050 breakout board. Compatible with GY-521, SEN-11028 and other MPU6050 wich have the MPU6050 AD0 pin connected to GND.
-#define KINEO_v1	// GEKO Navsat Kineo v1.0 board
+#define KYNEO_v1	// GEKO Navsat Kineo v1.0 board
 
 
 //#define DISABLE_MAGN // Uncomment this line to disable the magnetometer in the sensor fusion algorithm
@@ -85,7 +85,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   #define FREEIMU_ID "SparkFun 10183"
 #elif defined(ARDUIMU_v3)
   #define FREEIMU_ID "DIY Drones ArduIMU+ V3"
-#elif defined(KINEO_v1)
+#elif defined(KYNEO_v1)
   #define FREEIMU_ID "GEKO NavSat Kineo v1.0"
 #endif
 
@@ -98,21 +98,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 						defined(SEN_10121) 		|| defined(SEN_10736) 		|| defined(SEN_10724) 		|| \
 						defined(SEN_10183))
 #define HAS_BMA180() 	(defined(FREEIMU_v035) 	|| defined(FREEIMU_v035_MS)	|| defined(FREEIMU_v035_BMP))
-#define HAS_MPU6050() 	(defined(KINEO_v1)		|| defined(FREEIMU_v04) 	|| defined(GEN_MPU6050))
-#define HAS_MS5611() 	(defined(KINEO_v1)		|| defined(FREEIMU_v035_MS)	|| defined(FREEIMU_v04))	
-#define HAS_HMC5883L() 	(defined(KINEO_v1)		|| defined(FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
+#define HAS_MPU6050() 	(defined(KYNEO_v1)		|| defined(FREEIMU_v04) 	|| defined(GEN_MPU6050))
+#define HAS_MS5611() 	(defined(KYNEO_v1)		|| defined(FREEIMU_v035_MS)	|| defined(FREEIMU_v04))	
+#define HAS_HMC5883L() 	(defined(KYNEO_v1)		|| defined(FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
 						defined(FREEIMU_v03) 	|| defined(FREEIMU_v035) 	|| defined(FREEIMU_v035_BMP)|| \
 						defined(FREEIMU_v035_MS)|| defined(FREEIMU_v04) 	|| defined(SEN_10736) 		|| \
 						defined(SEN_10724) 		|| defined(SEN_10183)  		|| defined(ARDUIMU_v3))
 #define HAS_MPU6000() 	(defined(ARDUIMU_v3))
 
 #define IS_6DOM() 		(defined(SEN_10121) 	|| defined(GEN_MPU6050))
-#define IS_9DOM() 		(defined(KINEO_v1)		|| defined(FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
+#define IS_9DOM() 		(defined(KYNEO_v1)		|| defined(FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
 						defined(FREEIMU_v03) 	|| defined(FREEIMU_v035) 	|| defined(FREEIMU_v035_BMP)|| \
 						defined(FREEIMU_v035_MS)|| defined(FREEIMU_v04) 	|| defined(SEN_10736) 		|| \
 						defined(SEN_10724) 		|| defined(SEN_10183) 		|| defined(ARDUIMU_v3))
 						
-#define HAS_AXIS_ALIGNED() 	(defined(KINEO_v1)	|| defined (FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
+#define HAS_AXIS_ALIGNED() 	(defined(KYNEO_v1)	|| defined (FREEIMU_v01) 	|| defined(FREEIMU_v02) 	|| \
 							defined(FREEIMU_v03)|| defined(FREEIMU_v035) 	|| defined(FREEIMU_v035_MS) || \
 							defined(FREEIMU_v035_BMP)|| defined(FREEIMU_v04)|| defined(SEN_10121) 		|| \
 							defined(SEN_10736))
@@ -244,7 +244,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /////////////////////////////////---------------------------------------------
 
-//#define MAGN_DISABLED //////////////*************** Añadido para probar placa Kyneo v3 en la que no funciona el magnetometro
+//#define MAGN_DISABLED //////////////*************** Añadido para probar placa Kyneo v1 en la que no funciona el magnetometro
 
 class FreeIMU
 {
@@ -260,9 +260,6 @@ class FreeIMU
 	//Para compensación de temperatura
 	void tc_param(float mx,float my,float mz,float bx, float by,float bz, int t); // sets parameters for TC  
 	void tc_bias();
-	//
-	
-	//
 	
     void init();
     void init(bool fastmode);
@@ -316,7 +313,7 @@ class FreeIMU
       MS561101BA baro;
     #endif
     
-    
+	
     int* raw_acc, raw_gyro, raw_magn;
     // calibration parameters
     int16_t gyro_off_x, gyro_off_y, gyro_off_z;
@@ -324,12 +321,9 @@ class FreeIMU
     float acc_scale_x, acc_scale_y, acc_scale_z, magn_scale_x, magn_scale_y, magn_scale_z;
     
 	/// parte de demostración del no uso de calibración
-	
 	void getUncalibValues(float * uncalibValues);
 	void getUncalibratedQ(float * q);
-	
 	//
-	
 	
   private:
     #if IS_9DOM()
