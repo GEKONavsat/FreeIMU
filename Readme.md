@@ -9,7 +9,7 @@ Calibrate the Kyneo MARG sensors operation.
 Includes:
 
 	- Arduino_Sketch\FreeIMU_serial: Arduino sketch to be uploaded to Kyneo.
-	- FreeIMU_GUI\cal_gui.py: User interface, based on python.
+	- FreeIMU_GUI\cal_gui.py: User interface, based on Python (tested with Python 2.7.11).
 	
 # Kyneo Test Bench GUI
 
