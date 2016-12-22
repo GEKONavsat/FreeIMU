@@ -11,6 +11,9 @@ Includes:
 	- Arduino_Sketch\FreeIMU_serial: Arduino sketch to be uploaded to Kyneo.
 	- FreeIMU_GUI\cal_gui.py: User interface, based on Python (tested with Python 2.7.11).
 	
+(Also inside the folder "Arduino_Sketch" is the sketch "CalibrationData2EEPROM", to save the 
+calibration parameters from "calibration.h" to the Kyneo's EEPROM)
+	
 # Kyneo Test Bench GUI
 
 Test the Kyneo performance, specially once it's been calibrated. Includes Windows and Linux folders.
